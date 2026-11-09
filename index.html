@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jumbles' Word Dash - For Alex</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            box-sizing: border-box;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #090a10;
+            font-family: 'Fredoka', sans-serif;
+            touch-action: none;
+        }
+        .arcade-font {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        @keyframes floatSlow {
+            0%, 100% { transform: translateY(0px) rotate(-1deg); }
+            50% { transform: translateY(-8px) rotate(1deg); }
+        }
+        .animate-float {
+            animation: floatSlow 3.5s ease-in-out infinite;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 15px rgba(245, 158, 11, 0.5), 0 0 30px rgba(236, 72, 153, 0.3); }
+            50% { box-shadow: 0 0 25px rgba(245, 158, 11, 0.85), 0 0 45px rgba(236, 72, 153, 0.6); }
+        }
+        .btn-glow {
+            animation: pulseGlow 2s infinite;
+        }
+        .letter-slot {
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .letter-slot.filled {
+            transform: scale(1.08);
+        }
+        /* Custom scrollbar for modal if needed on tiny screens */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #4f46e5; border-radius: 4px; }
+    </style>
+</head>
+<body class="flex items-center justify-center w-full h-full bg-slate-950 text-white">
+
+    <!-- Mobile Arcade Cabinet Frame -->
+    <div id="game-wrapper" class="relative w-full h-full max-w-[500px] max-h-[960px] bg-gradient-to-b from-[#131629] via-[#1d1936] to-[#0f172a] overflow-hidden sm:rounded-3xl sm:border-4 sm:border-indigo-500/40 sm:shadow-[0_0_60px_rgba(99,102,241,0.25)] flex flex-col">
+
+        <!-- TOP HUD -->
+        <header id="hud" class="relative z-20 px-3 pt-3 pb-2 bg-slate-900/80 backdrop-blur-md border-b border-indigo-500/20 flex flex-col gap-2">
+            <!-- Row 1: Score, Lives, Controls -->
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="bg-indigo-950/90 border border-indigo-500/40 rounded-xl px-3 py-1 flex items-center gap-2">
+                        <span class="text-xs text-indigo-300 uppercase tracking-wider font-semibold">Score</span>
+                        <span id="score-val" class="arcade-font text-lg font-bold text-amber-400">0</span>
+                    </div>
+                    <div id="combo-badge" class="hidden bg-gradient-to-r from-pink-500 to-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-md animate-bounce">
+                        x2
+                    </div>
+                </div>
+
+                <!-- Lives & Audio / Pause -->
+                <div class="flex items-center gap-2">
+                    <div id="lives-display" class="flex items-center gap-0.5 text-base bg-slate-800/80 px-2.5 py-1 rounded-xl border border-slate-700">
+                        <span>❤️</span><span>❤️</span><span>❤️</span>
+                    </div>
+                    <button id="mute-btn" aria-label="Toggle Sound" class="w-9 h-9 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-600/60 flex items-center justify-center text-base transition">
+                        🔊
+                    </button>
+                    <button id="pause-btn" aria-label="Pause Game" class="w-9 h-9 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-600/60 flex items-center justify-center text-base transition">
+                        ⏸️
+                    </button>
+                </div>
+            </div>
+
+            <!-- Row 2: Jumble Word Target Bar -->
+            <div class="bg-indigo-950/70 border border-indigo-500/30 rounded-2xl p-2 flex flex-col items-center justify-center relative overflow-hidden">
+                <div class="flex items-center justify-between w-full px-1 mb-1">
+                    <span id="word-category" class="text-[11px] uppercase tracking-wider font-semibold text-cyan-300">✨ Alex's Jumble Target</span>
+                    <span id="jumbles-solved-count" class="text-[11px] font-semibold text-amber-300">Words: 0</span>
+                </div>
+                <!-- Target Letter Slots -->
+                <div id="word-slots" class="flex items-center justify-center gap-1.5 my-0.5 flex-wrap">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Active Powerups Bar -->
+            <div id="powerup-bar" class="hidden flex items-center justify-center gap-3 text-xs font-semibold py-0.5">
+                <!-- Populated dynamically -->
+            </div>
+        </header>
+
+        <!-- MAIN GAME CANVAS CONTAINER -->
+        <div id="canvas-container" class="relative flex-1 w-full h-full overflow-hidden">
+            <canvas id="game-canvas" class="block w-full h-full"></canvas>
+
+            <!-- Touch Hint Footer at Start of Game -->
+            <div id="touch-hint" class="pointer-events-none absolute bottom-5 inset-x-0 flex flex-col items-center justify-center opacity-80 transition-opacity duration-500">
+                <div class="bg-slate-900/75 border border-indigo-400/30 backdrop-blur-sm px-4 py-1.5 rounded-full text-xs text-indigo-200 flex items-center gap-2 shadow-lg">
+                    <span>👈</span> Drag anywhere or use Arrow Keys to guide Jumbles <span>👉</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- OVERLAY: START SCREEN -->
+        <div id="start-overlay" class="absolute inset-0 z-30 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-between p-6 text-center overflow-y-auto">
+            <div class="w-full flex items-center justify-between text-xs text-indigo-300/80">
+                <span class="bg-indigo-950/90 border border-indigo-500/40 px-3 py-1 rounded-full font-semibold">👑 VIP Edition: ALEX</span>
+                <span class="bg-amber-500/20 border border-amber-400/40 text-amber-300 px-3 py-1 rounded-full font-semibold">🏆 Best: <span id="menu-best-score">0</span></span>
+            </div>
+
+            <!-- Hero Mascot & Title -->
+            <div class="my-auto flex flex-col items-center max-w-xs">
+                <div class="relative mb-4 animate-float">
+                    <div class="w-28 h-28 rounded-3xl bg-gradient-to-tr from-indigo-600 via-purple-500 to-pink-500 p-1 shadow-[0_0_40px_rgba(236,72,153,0.5)]">
+                        <div class="w-full h-full bg-slate-900 rounded-[20px] flex flex-col items-center justify-center relative overflow-hidden">
+                            <!-- Custom SVG Jumbles Mascot -->
+                            <svg class="w-20 h-20" viewBox="0 0 100 100">
+                                <!-- Crown -->
+                                <polygon points="28,28 38,12 50,24 62,12 72,28" fill="#fbbf24" stroke="#f59e0b" stroke-width="2"/>
+                                <circle cx="38" cy="12" r="3" fill="#ec4899"/>
+                                <circle cx="50" cy="20" r="3" fill="#38bdf8"/>
+                                <circle cx="62" cy="12" r="3" fill="#ec4899"/>
+                                <!-- Body -->
+                                <rect x="22" y="28" width="56" height="52" rx="18" fill="#6366f1" stroke="#a5b4fc" stroke-width="3"/>
+                                <!-- Cute Visor / Eyes -->
+                                <rect x="30" y="38" width="40" height="18" rx="9" fill="#0f172a"/>
+                                <circle cx="41" cy="47" r="4.5" fill="#38bdf8"/>
+                                <circle cx="59" cy="47" r="4.5" fill="#38bdf8"/>
+                                <circle cx="42.5" cy="45.5" r="1.5" fill="#ffffff"/>
+                                <circle cx="60.5" cy="45.5" r="1.5" fill="#ffffff"/>
+                                <!-- Happy Mouth -->
+                                <path d="M 42 64 Q 50 71 58 64" stroke="#fbbf24" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+                                <!-- Cheeks -->
+                                <circle cx="33" cy="61" r="3.5" fill="#f472b6" opacity="0.8"/>
+                                <circle cx="67" cy="61" r="3.5" fill="#f472b6" opacity="0.8"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <span class="absolute -bottom-2 -right-2 bg-amber-400 text-slate-950 text-xs font-extrabold px-2.5 py-0.5 rounded-full shadow">ALEX</span>
+                </div>
+
+                <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-amber-300 via-pink-400 to-cyan-300 bg-clip-text text-transparent drop-shadow">
+                    JUMBLES'
+                </h1>
+                <h2 class="arcade-font text-xl sm:text-2xl font-bold text-indigo-200 tracking-widest -mt-1 mb-3">
+                    WORD & COIN DASH
+                </h2>
+                <p class="text-xs sm:text-sm text-slate-300 leading-relaxed mb-5">
+                    Custom-built arcade adventure for <span class="text-amber-300 font-semibold">Jumbles (Alex)</span>! Catch falling letters to unscramble secret words, snatch golden coins, and dodge the space bombs!
+                </p>
+
+                <!-- Mini How-To Grid -->
+                <div class="grid grid-cols-2 gap-2 w-full text-left bg-slate-900/90 border border-indigo-500/30 p-3 rounded-2xl mb-6 text-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="w-7 h-7 rounded-lg bg-amber-400/20 border border-amber-400 text-amber-300 font-bold flex items-center justify-center shrink-0">A</span>
+                        <span class="text-slate-200">Catch glowing letters for massive bonus!</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-7 h-7 rounded-lg bg-pink-500/20 border border-pink-400 text-pink-300 font-bold flex items-center justify-center shrink-0">🧲</span>
+                        <span class="text-slate-200">Grab Magnets, Shields & Slow-Mo!</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-7 h-7 rounded-lg bg-yellow-500/20 border border-yellow-400 text-yellow-300 font-bold flex items-center justify-center shrink-0">🪙</span>
+                        <span class="text-slate-200">Collect coins & gems to build combos!</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-7 h-7 rounded-lg bg-red-500/20 border border-red-400 text-red-300 font-bold flex items-center justify-center shrink-0">💣</span>
+                        <span class="text-slate-200">Dodge glitch bombs or use a Shield!</span>
+                    </div>
+                </div>
+
+                <button id="start-btn" class="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500 text-slate-950 font-extrabold text-xl tracking-wide shadow-xl btn-glow active:scale-95 transition cursor-pointer">
+                    🚀 PLAY NOW, ALEX!
+                </button>
+            </div>
+
+            <div class="text-[11px] text-slate-400">
+                Touch & Drag or Mouse / Arrow Keys Supported
+            </div>
+        </div>
+
+        <!-- OVERLAY: PAUSE MODAL -->
+        <div id="pause-overlay" class="hidden absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+            <div class="bg-slate-900 border-2 border-indigo-500/40 rounded-3xl p-6 w-full max-w-xs shadow-2xl flex flex-col items-center">
+                <div class="text-4xl mb-2">⏸️</div>
+                <h3 class="text-2xl font-bold text-white mb-1">Game Paused</h3>
+                <p class="text-xs text-indigo-300 mb-6">Take a breather, Jumbles!</p>
+
+                <button id="resume-btn" class="w-full py-3.5 mb-3 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-500 text-slate-950 font-bold text-base shadow-lg active:scale-95 transition">
+                    ▶️ Resume Game
+                </button>
+                <button id="restart-from-pause-btn" class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-sm border border-slate-600 active:scale-95 transition">
+                    🔄 Restart Run
+                </button>
+            </div>
+        </div>
+
+        <!-- OVERLAY: GAME OVER MODAL -->
+        <div id="gameover-overlay" class="hidden absolute inset-0 z-30 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+            <div class="bg-slate-900 border-2 border-pink-500/40 rounded-3xl p-6 w-full max-w-xs shadow-[0_0_50px_rgba(236,72,153,0.3)] flex flex-col items-center relative overflow-hidden">
+                <div id="new-record-badge" class="hidden bg-gradient-to-r from-amber-400 to-pink-500 text-slate-950 text-xs font-extrabold px-3 py-1 rounded-full mb-2 shadow animate-bounce">
+                    🎉 NEW HIGH SCORE, ALEX!
+                </div>
+                <div class="text-4xl mb-1">👑</div>
+                <h3 class="text-2xl font-extrabold text-white">Awesome Run, Jumbles!</h3>
+                <p id="gameover-rank" class="text-xs text-pink-300 font-semibold mb-4">Rank: Arcade Legend</p>
+
+                <div class="grid grid-cols-2 gap-2.5 w-full mb-5">
+                    <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-2.5">
+                        <div class="text-[10px] text-slate-400 uppercase">Final Score</div>
+                        <div id="final-score" class="arcade-font text-xl font-bold text-amber-400">0</div>
+                    </div>
+                    <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-2.5">
+                        <div class="text-[10px] text-slate-400 uppercase">Best Score</div>
+                        <div id="final-best" class="arcade-font text-xl font-bold text-cyan-300">0</div>
+                    </div>
+                    <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-2.5">
+                        <div class="text-[10px] text-slate-400 uppercase">Words Solved</div>
+                        <div id="final-words" class="arcade-font text-lg font-bold text-emerald-400">0</div>
+                    </div>
+                    <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-2.5">
+                        <div class="text-[10px] text-slate-400 uppercase">Max Combo</div>
+                        <div id="final-combo" class="arcade-font text-lg font-bold text-pink-400">x1</div>
+                    </div>
+                </div>
+
+                <button id="play-again-btn" class="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500 text-slate-950 font-extrabold text-lg shadow-xl btn-glow active:scale-95 transition cursor-pointer">
+                    🔄 PLAY AGAIN
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        /* ============================================================================
+         * JUMBLES' WORD & COIN DASH - CUSTOM ARCADE ENGINE FOR ALEX
+         * Single-file HTML5 Canvas + Web Audio API + Responsive Touch & Keyboard
+         * ============================================================================ */
+
+        // --- PERSONALIZED WORD LIST FOR ALEX / JUMBLES ---
+        const WORD_BANK = [
+            { word: "ALEX", hint: "The VIP Player Himself!" },
+            { word: "JUMBLES", hint: "The Ultimate Nickname!" },
+            { word: "ARCADE", hint: "Neon Coins & High Scores!" },
+            { word: "LEGEND", hint: "What Jumbles Is!" },
+            { word: "VICTORY", hint: "Sweet Taste of Winning!" },
+            { word: "COSMIC", hint: "Out of This World!" },
+            { word: "TURBO", hint: "Supercharged Speed!" },
+            { word: "CHAMP", hint: "Number One Trophy Holder!" },
+            { word: "GALAXY", hint: "Stars, Planets & Nebulas!" },
+            { word: "JACKPOT", hint: "Big Golden Treasure!" },
+            { word: "ROCKET", hint: "Blasting Off to Space!" },
+            { word: "WIZARD", hint: "Master of Jumble Magic!" }
+        ];
+
+        // --- WEB AUDIO SYNTHESIZER (NO EXTERNAL ASSETS REQUIRED) ---
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        this.ctx = new AudioCtx();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            toggleMute() {
+                this.muted = !this.muted;
+                return this.muted;
+            }
+
+            playTone(freq, type, duration, vol = 0.15, slideFreq = null) {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    if (slideFreq) {
+                        osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+                    }
+                    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch (e) {
+                    // Ignore audio context restrictions if uninitialized
+                }
+            }
+
+            coin() {
+                this.playTone(987.77, 'sine', 0.09, 0.12);
+                setTimeout(() => this.playTone(1318.51, 'sine', 0.18, 0.14), 65);
+            }
+
+            gem() {
+                this.playTone(1046.5, 'triangle', 0.08, 0.15);
+                setTimeout(() => this.playTone(1567.98, 'triangle', 0.12, 0.15), 60);
+                setTimeout(() => this.playTone(2093.0, 'sine', 0.22, 0.16), 120);
+            }
+
+            letterCorrect() {
+                this.playTone(587.33, 'triangle', 0.1, 0.18);
+                setTimeout(() => this.playTone(880, 'triangle', 0.18, 0.18), 70);
+            }
+
+            wordComplete() {
+                const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51];
+                notes.forEach((n, idx) => {
+                    setTimeout(() => this.playTone(n, 'triangle', 0.22, 0.2), idx * 75);
+                });
+            }
+
+            powerup() {
+                this.playTone(330, 'sine', 0.3, 0.18, 990);
+            }
+
+            shieldBreak() {
+                this.playTone(400, 'sawtooth', 0.25, 0.16, 120);
+            }
+
+            bomb() {
+                this.playTone(160, 'sawtooth', 0.35, 0.25, 42);
+            }
+
+            gameOver() {
+                const notes = [440, 392, 349.23, 293.66];
+                notes.forEach((n, idx) => {
+                    setTimeout(() => this.playTone(n, 'sawtooth', 0.28, 0.15), idx * 140);
+                });
+            }
+        }
+
+        const sfx = new SoundEffects();
+
+        // --- DOM ELEMENTS ---
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+
+        const scoreValEl = document.getElementById('score-val');
+        const comboBadgeEl = document.getElementById('combo-badge');
+        const livesDisplayEl = document.getElementById('lives-display');
+        const wordCategoryEl = document.getElementById('word-category');
+        const jumblesSolvedCountEl = document.getElementById('jumbles-solved-count');
+        const wordSlotsEl = document.getElementById('word-slots');
+        const powerupBarEl = document.getElementById('powerup-bar');
+        const touchHintEl = document.getElementById('touch-hint');
+
+        const startOverlay = document.getElementById('start-overlay');
+        const pauseOverlay = document.getElementById('pause-overlay');
+        const gameoverOverlay = document.getElementById('gameover-overlay');
+
+        const menuBestScoreEl = document.getElementById('menu-best-score');
+        const finalScoreEl = document.getElementById('final-score');
+        const finalBestEl = document.getElementById('final-best');
+        const finalWordsEl = document.getElementById('final-words');
+        const finalComboEl = document.getElementById('final-combo');
+        const newRecordBadgeEl = document.getElementById('new-record-badge');
+        const gameoverRankEl = document.getElementById('gameover-rank');
+
+        const STORAGE_KEY = 'jumbles_alex_arcade_best_v1';
+        let bestScore = parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10);
+        menuBestScoreEl.textContent = bestScore.toLocaleString();
+
+        // --- GAME STATE ---
+        let gameState = 'MENU'; // MENU, PLAYING, PAUSED, GAMEOVER
+        let width = 360;
+        let height = 600;
+        let dpr = window.devicePixelRatio || 1;
+
+        let score = 0;
+        let lives = 3;
+        let combo = 0;
+        let maxCombo = 1;
+        let wordsCompleted = 0;
+        let gameTime = 0;
+        let difficultyMultiplier = 1;
+        let screenShake = 0;
+
+        // Current Word Target State
+        let currentWordObj = WORD_BANK[0];
+        let collectedIndices = []; // boolean array for each character slot
+        let lastWordIndex = -1;
+
+        // Player ("Jumbles") Object
+        const player = {
+            x: 180,
+            y: 500,
+            targetX: 180,
+            radius: 30,
+            vx: 0,
+            tilt: 0,
+            hasShield: false,
+            magnetTimer: 0,
+            slowMoTimer: 0,
+            doubleScoreTimer: 0,
+            bouncePhase: 0
+        };
+
+        // Collections
+        let items = [];
+        let particles = [];
+        let floatingTexts = [];
+        let bgStars = [];
+        let spawnTimer = 0;
+        let letterSpawnTimer = 0;
+
+        // Input state
+        const keys = { left: false, right: false };
+        let isPointerDown = false;
+
+        // --- INITIALIZE BACKGROUND STARS ---
+        function initStars() {
+            bgStars = [];
+            for (let i = 0; i < 45; i++) {
+                bgStars.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    size: Math.random() * 2.2 + 0.8,
+                    speed: Math.random() * 35 + 15,
+                    alpha: Math.random() * 0.6 + 0.3,
+                    twinkleSpeed: Math.random() * 3 + 1
+                });
+            }
+        }
+
+        // --- RESIZE HANDLER ---
+        function resizeCanvas() {
+            const rect = container.getBoundingClientRect();
+            width = Math.max(280, rect.width);
+            height = Math.max(320, rect.height);
+            dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            player.y = height - 68;
+            player.x = Math.min(Math.max(player.x, player.radius), width - player.radius);
+            player.targetX = Math.min(Math.max(player.targetX, player.radius), width - player.radius);
+
+            if (bgStars.length === 0) initStars();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // --- WORD JUMBLE SYSTEM ---
+        function pickNextWord() {
+            let idx;
+            if (wordsCompleted === 0) {
+                idx = 0; // Always start with "ALEX" on the first word, then "JUMBLES" second!
+            } else if (wordsCompleted === 1) {
+                idx = 1; // "JUMBLES"
+            } else {
+                do {
+                    idx = Math.floor(Math.random() * WORD_BANK.length);
+                } while (idx === lastWordIndex);
+            }
+            lastWordIndex = idx;
+            currentWordObj = WORD_BANK[idx];
+            collectedIndices = new Array(currentWordObj.word.length).fill(false);
+            renderWordSlots();
+        }
+
+        function renderWordSlots() {
+            wordCategoryEl.textContent = `✨ ${currentWordObj.hint}`;
+            jumblesSolvedCountEl.textContent = `Words: ${wordsCompleted}`;
+            wordSlotsEl.innerHTML = '';
+
+            const chars = currentWordObj.word.split('');
+            chars.forEach((ch, idx) => {
+                const isFilled = collectedIndices[idx];
+                const slot = document.createElement('div');
+                slot.className = `letter-slot w-8 h-9 sm:w-9 sm:h-10 rounded-xl flex items-center justify-center arcade-font font-extrabold text-base sm:text-lg border-2 ${
+                    isFilled
+                        ? 'filled bg-gradient-to-b from-amber-300 to-amber-500 text-slate-950 border-white shadow-[0_0_12px_rgba(251,191,36,0.8)]'
+                        : 'bg-slate-900/90 text-indigo-300/40 border-indigo-400/40 border-dashed'
+                }`;
+                slot.textContent = ch;
+                wordSlotsEl.appendChild(slot);
+            });
+        }
+
+        function getNeededLetters() {
+            const needed = [];
+            for (let i = 0; i < currentWordObj.word.length; i++) {
+                if (!collectedIndices[i]) {
+                    needed.push({ char: currentWordObj.word[i], index: i });
+                }
+            }
+            return needed;
+        }
+
+        // --- HUD UPDATES ---
+        function updateHUD() {
+            scoreValEl.textContent = Math.floor(score).toLocaleString();
+
+            // Combo multiplier badge
+            const mult = getScoreMultiplier();
+            if (mult > 1) {
+                comboBadgeEl.classList.remove('hidden');
+                comboBadgeEl.textContent = `🔥 x${mult} COMBO`;
+            } else {
+                comboBadgeEl.classList.add('hidden');
+            }
+
+            // Lives hearts
+            let heartsHTML = '';
+            for (let i = 0; i < 3; i++) {
+                heartsHTML += `<span class="${i < lives ? 'opacity-100 scale-100' : 'opacity-25 grayscale'} transition duration-300">❤️</span>`;
+            }
+            if (player.hasShield) {
+                heartsHTML += `<span class="ml-1 text-cyan-300 animate-pulse" title="Shield Active">🛡️</span>`;
+            }
+            livesDisplayEl.innerHTML = heartsHTML;
+
+            // Active timed powerups
+            const activeTags = [];
+            if (player.magnetTimer > 0) {
+                activeTags.push(`<span class="bg-pink-500/20 border border-pink-400/50 text-pink-200 px-2.5 py-0.5 rounded-full">🧲 Magnet ${Math.ceil(player.magnetTimer)}s</span>`);
+            }
+            if (player.slowMoTimer > 0) {
+                activeTags.push(`<span class="bg-cyan-500/20 border border-cyan-400/50 text-cyan-200 px-2.5 py-0.5 rounded-full">❄️ Slow-Mo ${Math.ceil(player.slowMoTimer)}s</span>`);
+            }
+            if (player.doubleScoreTimer > 0) {
+                activeTags.push(`<span class="bg-amber-500/20 border border-amber-400/50 text-amber-200 px-2.5 py-0.5 rounded-full">⭐ 2x Points ${Math.ceil(player.doubleScoreTimer)}s</span>`);
+            }
+
+            if (activeTags.length > 0) {
+                powerupBarEl.classList.remove('hidden');
+                powerupBarEl.innerHTML = activeTags.join('');
+            } else {
+                powerupBarEl.classList.add('hidden');
+            }
+        }
+
+        function getScoreMultiplier() {
+            let base = 1 + Math.min(4, Math.floor(combo / 5));
+            if (player.doubleScoreTimer > 0) base *= 2;
+            return base;
+        }
+
+        // --- SPAWNING FALLING ITEMS ---
+        function spawnItem(forceLetter = false) {
+            const margin = 34;
+            const x = margin + Math.random() * (width - margin * 2);
+            const baseSpeed = (155 + Math.min(180, gameTime * 2.4)) * (0.88 + Math.random() * 0.28);
+
+            if (forceLetter) {
+                const needed = getNeededLetters();
+                let chosenChar = 'A';
+                if (needed.length > 0) {
+                    // 80% chance to spawn a directly needed letter so gameplay feels super rewarding
+                    if (Math.random() < 0.82) {
+                        chosenChar = needed[Math.floor(Math.random() * needed.length)].char;
+                    } else {
+                        const alphabet = "ALEXJUMBSCRD";
+                        chosenChar = alphabet[Math.floor(Math.random() * alphabet.length)];
+                    }
+                }
+                items.push({
+                    type: 'LETTER',
+                    char: chosenChar,
+                    x,
+                    y: -30,
+                    radius: 22,
+                    vy: baseSpeed * 0.92,
+                    vx: (Math.random() - 0.5) * 28,
+                    rot: (Math.random() - 0.5) * 0.3,
+                    rotSpeed: (Math.random() - 0.5) * 1.2
+                });
+                return;
+            }
+
+            const roll = Math.random();
+            // Bomb probability scales mildly with time
+            const bombChance = Math.min(0.27, 0.14 + gameTime * 0.0015);
+
+            if (roll < bombChance) {
+                items.push({
+                    type: 'BOMB',
+                    x,
+                    y: -30,
+                    radius: 21,
+                    vy: baseSpeed * 1.08,
+                    vx: (Math.random() - 0.5) * 35,
+                    rot: 0,
+                    rotSpeed: (Math.random() - 0.5) * 3
+                });
+            } else if (roll < bombChance + 0.085) {
+                // Powerup
+                const pTypes = ['MAGNET', 'SHIELD', 'SLOWMO', 'STAR2X'];
+                const pType = pTypes[Math.floor(Math.random() * pTypes.length)];
+                items.push({
+                    type: 'POWERUP',
+                    powerType: pType,
+                    x,
+                    y: -30,
+                    radius: 21,
+                    vy: baseSpeed * 0.95,
+                    vx: (Math.random() - 0.5) * 25,
+                    rot: 0,
+                    rotSpeed: 1.5
+                });
+            } else if (roll < bombChance + 0.22) {
+                // Cosmic Gem
+                items.push({
+                    type: 'GEM',
+                    x,
+                    y: -30,
+                    radius: 19,
+                    vy: baseSpeed * 1.12,
+                    vx: (Math.random() - 0.5) * 30,
+                    rot: 0,
+                    rotSpeed: 2.2
+                });
+            } else {
+                // Golden Coin
+                items.push({
+                    type: 'COIN',
+                    x,
+                    y: -30,
+                    radius: 17,
+                    vy: baseSpeed,
+                    vx: 0,
+                    rot: Math.random() * Math.PI,
+                    rotSpeed: 3.5
+                });
+            }
+        }
+
+        // --- PARTICLES & FLOATING TEXT ---
+        function createBurst(x, y, color, count = 14) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 190 + 50;
+                particles.push({
+                    x,
+                    y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 30,
+                    size: Math.random() * 5 + 3,
+                    color,
+                    life: 1,
+                    decay: Math.random() * 1.4 + 1.2
+                });
+            }
+        }
+
+        function addFloatingText(text, x, y, color = '#fbbf24', scale = 1) {
+            floatingTexts.push({
+                text,
+                x: Math.min(Math.max(x, 45), width - 45),
+                y,
+                vy: -75,
+                life: 1.1,
+                color,
+                scale
+            });
+        }
+
+        // --- COLLISION & COLLECTION LOGIC ---
+        function handleItemCatch(item) {
+            const mult = getScoreMultiplier();
+
+            if (item.type === 'COIN') {
+                sfx.coin();
+                combo++;
+                maxCombo = Math.max(maxCombo, mult);
+                const pts = 15 * mult;
+                score += pts;
+                createBurst(item.x, item.y, '#fbbf24', 10);
+                addFloatingText(`+${pts}`, item.x, item.y, '#fde047', 1);
+            } else if (item.type === 'GEM') {
+                sfx.gem();
+                combo += 2;
+                maxCombo = Math.max(maxCombo, getScoreMultiplier());
+                const pts = 50 * mult;
+                score += pts;
+                createBurst(item.x, item.y, '#38bdf8', 16);
+                addFloatingText(`+${pts} GEM!`, item.x, item.y, '#38bdf8', 1.15);
+            } else if (item.type === 'LETTER') {
+                // Check if this letter is needed in the current jumble word
+                let matchedSlot = -1;
+                for (let i = 0; i < currentWordObj.word.length; i++) {
+                    if (!collectedIndices[i] && currentWordObj.word[i] === item.char) {
+                        matchedSlot = i;
+                        break;
+                    }
+                }
+
+                if (matchedSlot !== -1) {
+                    collectedIndices[matchedSlot] = true;
+                    combo += 2;
+                    const pts = 40 * mult;
+                    score += pts;
+                    renderWordSlots();
+                    createBurst(item.x, item.y, '#a855f7', 18);
+
+                    // Check if entire word is solved
+                    if (collectedIndices.every(Boolean)) {
+                        sfx.wordComplete();
+                        wordsCompleted++;
+                        const wordBonus = 250 * mult;
+                        score += wordBonus;
+                        if (lives < 3) {
+                            lives++;
+                            addFloatingText(`🎉 "${currentWordObj.word}" +${wordBonus} & +1❤️!`, width / 2, height / 2, '#4ade80', 1.35);
+                        } else {
+                            addFloatingText(`🎉 "${currentWordObj.word}" SOLVED! +${wordBonus}`, width / 2, height / 2, '#f472b6', 1.35);
+                        }
+                        // Celebration confetti burst across screen
+                        createBurst(width * 0.25, height * 0.4, '#fbbf24', 22);
+                        createBurst(width * 0.75, height * 0.4, '#ec4899', 22);
+                        createBurst(width * 0.5, height * 0.3, '#38bdf8', 22);
+
+                        setTimeout(() => {
+                            if (gameState === 'PLAYING') pickNextWord();
+                        }, 350);
+                    } else {
+                        sfx.letterCorrect();
+                        addFloatingText(`'${item.char}' +${pts}`, item.x, item.y, '#e879f9', 1.15);
+                    }
+                } else {
+                    // Extra bonus letter even if already filled
+                    sfx.coin();
+                    const pts = 20 * mult;
+                    score += pts;
+                    createBurst(item.x, item.y, '#c084fc', 10);
+                    addFloatingText(`+${pts}`, item.x, item.y, '#c084fc', 0.95);
+                }
+            } else if (item.type === 'POWERUP') {
+                sfx.powerup();
+                combo++;
+                createBurst(item.x, item.y, '#4ade80', 18);
+                if (item.powerType === 'MAGNET') {
+                    player.magnetTimer = 8.5;
+                    addFloatingText('🧲 MAGNET ON!', item.x, item.y, '#f472b6', 1.2);
+                } else if (item.powerType === 'SHIELD') {
+                    player.hasShield = true;
+                    addFloatingText('🛡️ SHIELD UP!', item.x, item.y, '#38bdf8', 1.2);
+                } else if (item.powerType === 'SLOWMO') {
+                    player.slowMoTimer = 7.0;
+                    addFloatingText('❄️ TIME SLOW!', item.x, item.y, '#67e8f9', 1.2);
+                } else if (item.powerType === 'STAR2X') {
+                    player.doubleScoreTimer = 8.5;
+                    addFloatingText('⭐ 2X SCORE!', item.x, item.y, '#fde047', 1.2);
+                }
+            } else if (item.type === 'BOMB') {
+                if (player.hasShield) {
+                    sfx.shieldBreak();
+                    player.hasShield = false;
+                    createBurst(item.x, item.y, '#38bdf8', 24);
+                    addFloatingText('🛡️ SHIELD BLOCKED!', item.x, item.y, '#38bdf8', 1.2);
+                } else {
+                    sfx.bomb();
+                    lives--;
+                    combo = 0;
+                    screenShake = 0.35;
+                    createBurst(item.x, item.y, '#ef4444', 28);
+                    addFloatingText('💥 OUCH!', item.x, item.y, '#f87171', 1.3);
+
+                    if (lives <= 0) {
+                        triggerGameOver();
+                        return;
+                    }
+                }
+            }
+
+            player.bouncePhase = 1.0;
+            updateHUD();
+        }
+
+        // --- GAME FLOW FUNCTIONS ---
+        function startGame() {
+            sfx.init();
+            resizeCanvas();
+
+            score = 0;
+            lives = 3;
+            combo = 0;
+            maxCombo = 1;
+            wordsCompleted = 0;
+            gameTime = 0;
+            screenShake = 0;
+
+            player.x = width / 2;
+            player.targetX = width / 2;
+            player.hasShield = false;
+            player.magnetTimer = 0;
+            player.slowMoTimer = 0;
+            player.doubleScoreTimer = 0;
+
+            items = [];
+            particles = [];
+            floatingTexts = [];
+            spawnTimer = 0.4;
+            letterSpawnTimer = 1.2;
+
+            pickNextWord();
+            updateHUD();
+
+            startOverlay.classList.add('hidden');
+            pauseOverlay.classList.add('hidden');
+            gameoverOverlay.classList.add('hidden');
+            touchHintEl.style.opacity = '0.85';
+
+            gameState = 'PLAYING';
+        }
+
+        function triggerGameOver() {
+            gameState = 'GAMEOVER';
+            sfx.gameOver();
+            updateHUD();
+
+            const finalScore = Math.floor(score);
+            const isNewRecord = finalScore > bestScore && finalScore > 0;
+            if (isNewRecord) {
+                bestScore = finalScore;
+                localStorage.setItem(STORAGE_KEY, String(bestScore));
+                menuBestScoreEl.textContent = bestScore.toLocaleString();
+                newRecordBadgeEl.classList.remove('hidden');
+            } else {
+                newRecordBadgeEl.classList.add('hidden');
+            }
+
+            // Personalized Rank Title for Alex
+            let rank = "Rising Jumble Star ⭐";
+            if (finalScore >= 5000) rank = "Grandmaster Jumbles 👑";
+            else if (finalScore >= 2500) rank = "Cosmic Word Wizard 🚀";
+            else if (finalScore >= 1000) rank = "Arcade Champion 🏆";
+
+            gameoverRankEl.textContent = `Title Earned: ${rank}`;
+            finalScoreEl.textContent = finalScore.toLocaleString();
+            finalBestEl.textContent = bestScore.toLocaleString();
+            finalWordsEl.textContent = wordsCompleted;
+            finalComboEl.textContent = `x${maxCombo}`;
+
+            gameoverOverlay.classList.remove('hidden');
+        }
+
+        // --- MAIN UPDATE LOOP ---
+        let lastFrameTime = performance.now();
+
+        function update(dt) {
+            // Twinkle background stars always
+            bgStars.forEach(s => {
+                s.y += s.speed * dt * (gameState === 'PLAYING' ? 1 : 0.3);
+                if (s.y > height) {
+                    s.y = -5;
+                    s.x = Math.random() * width;
+                }
+            });
+
+            if (gameState !== 'PLAYING') return;
+
+            gameTime += dt;
+            if (gameTime > 4.5 && touchHintEl.style.opacity !== '0') {
+                touchHintEl.style.opacity = '0';
+            }
+
+            if (screenShake > 0) {
+                screenShake = Math.max(0, screenShake - dt);
+            }
+
+            // Timers for active powerups
+            let hudNeedsRefresh = false;
+            if (player.magnetTimer > 0) {
+                const prev = Math.ceil(player.magnetTimer);
+                player.magnetTimer = Math.max(0, player.magnetTimer - dt);
+                if (Math.ceil(player.magnetTimer) !== prev) hudNeedsRefresh = true;
+            }
+            if (player.slowMoTimer > 0) {
+                const prev = Math.ceil(player.slowMoTimer);
+                player.slowMoTimer = Math.max(0, player.slowMoTimer - dt);
+                if (Math.ceil(player.slowMoTimer) !== prev) hudNeedsRefresh = true;
+            }
+            if (player.doubleScoreTimer > 0) {
+                const prev = Math.ceil(player.doubleScoreTimer);
+                player.doubleScoreTimer = Math.max(0, player.doubleScoreTimer - dt);
+                if (Math.ceil(player.doubleScoreTimer) !== prev) hudNeedsRefresh = true;
+            }
+            if (hudNeedsRefresh) updateHUD();
+
+            // Keyboard movement
+            const moveSpeed = 440;
+            if (keys.left) player.targetX -= moveSpeed * dt;
+            if (keys.right) player.targetX += moveSpeed * dt;
+
+            // Clamp targetX
+            player.targetX = Math.min(Math.max(player.targetX, player.radius + 6), width - player.radius - 6);
+
+            // Smooth spring interpolation for player x
+            const prevX = player.x;
+            player.x += (player.targetX - player.x) * Math.min(1, dt * 16);
+            player.vx = (player.x - prevX) / Math.max(0.001, dt);
+            player.tilt = Math.max(-0.32, Math.min(0.32, player.vx * 0.00065));
+
+            if (player.bouncePhase > 0) {
+                player.bouncePhase = Math.max(0, player.bouncePhase - dt * 5);
+            }
+
+            // Spawning items
+            const speedFactor = player.slowMoTimer > 0 ? 0.55 : 1.0;
+            spawnTimer -= dt * speedFactor;
+            if (spawnTimer <= 0) {
+                spawnItem(false);
+                const interval = Math.max(0.32, 0.78 - gameTime * 0.0045);
+                spawnTimer = interval;
+            }
+
+            // Dedicated timer for Jumble target letters
+            letterSpawnTimer -= dt;
+            if (letterSpawnTimer <= 0) {
+                spawnItem(true);
+                letterSpawnTimer = Math.max(1.35, 2.3 - gameTime * 0.008);
+            }
+
+            // Update falling items
+            for (let i = items.length - 1; i >= 0; i--) {
+                const it = items[i];
+                const itemTimeScale = (it.type === 'BOMB' && player.slowMoTimer > 0) ? 0.45 : speedFactor;
+
+                // Magnet attraction for non-bombs
+                if (player.magnetTimer > 0 && it.type !== 'BOMB') {
+                    const dx = player.x - it.x;
+                    const dy = player.y - it.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < 240) {
+                        it.x += (dx / dist) * 320 * dt;
+                        it.y += (dy / dist) * 180 * dt;
+                    }
+                }
+
+                it.x += it.vx * dt * itemTimeScale;
+                it.y += it.vy * dt * itemTimeScale;
+                it.rot += it.rotSpeed * dt;
+
+                // Bounce off side walls gently
+                if (it.x < it.radius + 8 || it.x > width - it.radius - 8) {
+                    it.vx *= -1;
+                    it.x = Math.min(Math.max(it.x, it.radius + 8), width - it.radius - 8);
+                }
+
+                // Check collision with Jumbles player
+                const dist = Math.hypot(it.x - player.x, it.y - player.y);
+                if (dist < player.radius + it.radius - 4) {
+                    handleItemCatch(it);
+                    items.splice(i, 1);
+                    continue;
+                }
+
+                // Missed item off bottom
+                if (it.y > height + 40) {
+                    items.splice(i, 1);
+                }
+            }
+
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vy += 320 * dt; // gravity
+                p.life -= p.decay * dt;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // Update floating score texts
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                const ft = floatingTexts[i];
+                ft.y += ft.vy * dt;
+                ft.life -= dt * 1.1;
+                if (ft.life <= 0) floatingTexts.splice(i, 1);
+            }
+        }
+
+        // --- RENDERING ENGINE ---
+        function draw() {
+            ctx.save();
+
+            // Screen shake offset on bomb hit
+            if (screenShake > 0) {
+                const mag = screenShake * 18;
+                ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag);
+            }
+
+            // Clear & subtle cosmic grid
+            ctx.clearRect(0, 0, width, height);
+
+            // Background stars
+            bgStars.forEach(s => {
+                const twinkle = 0.55 + 0.45 * Math.sin(performance.now() * 0.003 * s.twinkleSpeed);
+                ctx.fillStyle = `rgba(224, 231, 255, ${s.alpha * twinkle})`;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Subtle floor glow track
+            const floorGrad = ctx.createLinearGradient(0, height - 90, 0, height);
+            floorGrad.addColorStop(0, 'rgba(99, 102, 241, 0)');
+            floorGrad.addColorStop(1, 'rgba(99, 102, 241, 0.18)');
+            ctx.fillStyle = floorGrad;
+            ctx.fillRect(0, height - 90, width, 90);
+
+            // Draw Magnet Aura if active
+            if (player.magnetTimer > 0) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(244, 114, 182, 0.35)';
+                ctx.lineWidth = 2;
+                const pulseRadius = player.radius + 18 + Math.sin(performance.now() * 0.01) * 8;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, pulseRadius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Draw Falling Items
+            items.forEach(it => {
+                ctx.save();
+                ctx.translate(it.x, it.y);
+
+                if (it.type === 'COIN') {
+                    const scaleX = Math.cos(it.rot);
+                    ctx.scale(Math.max(0.25, Math.abs(scaleX)), 1);
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.strokeStyle = '#fef08a';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, it.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#d97706';
+                    ctx.font = 'bold 14px "Space Grotesk", sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('$', 0, 1);
+                } else if (it.type === 'GEM') {
+                    ctx.rotate(it.rot * 0.5);
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.strokeStyle = '#bae6fd';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(0, -it.radius);
+                    ctx.lineTo(it.radius, 0);
+                    ctx.lineTo(0, it.radius);
+                    ctx.lineTo(-it.radius, 0);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                } else if (it.type === 'LETTER') {
+                    ctx.rotate(Math.sin(it.rot) * 0.15);
+                    // Check if letter is currently needed to highlight it with extra golden glow
+                    const isNeeded = getNeededLetters().some(n => n.char === it.char);
+                    if (isNeeded) {
+                        ctx.shadowColor = '#fbbf24';
+                        ctx.shadowBlur = 14;
+                    }
+                    ctx.fillStyle = isNeeded ? '#4f46e5' : '#312e81';
+                    ctx.strokeStyle = isNeeded ? '#fbbf24' : '#818cf8';
+                    ctx.lineWidth = 3;
+
+                    const r = it.radius;
+                    ctx.beginPath();
+                    ctx.roundRect(-r, -r, r * 2, r * 2, 10);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 21px "Space Grotesk", sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(it.char, 0, 1);
+                } else if (it.type === 'POWERUP') {
+                    ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+                    ctx.strokeStyle = '#34d399';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, it.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    let icon = '🧲';
+                    if (it.powerType === 'SHIELD') icon = '🛡️';
+                    else if (it.powerType === 'SLOWMO') icon = '❄️';
+                    else if (it.powerType === 'STAR2X') icon = '⭐';
+
+                    ctx.font = '20px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(icon, 0, 1);
+                } else if (it.type === 'BOMB') {
+                    ctx.rotate(it.rot);
+                    // Pulsing red danger circle
+                    ctx.fillStyle = '#1f2937';
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, it.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Spark
+                    ctx.fillStyle = '#f87171';
+                    ctx.font = '20px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('💣', 0, 1);
+                }
+
+                ctx.restore();
+            });
+
+            // --- DRAW PLAYER ("JUMBLES") ---
+            ctx.save();
+            const bounceScale = 1 + Math.sin(player.bouncePhase * Math.PI) * 0.16;
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.tilt);
+            ctx.scale(bounceScale, 2 - bounceScale);
+
+            const pr = player.radius;
+
+            // Shield bubble around Jumbles
+            if (player.hasShield) {
+                ctx.save();
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, pr + 11, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Golden Crown on top of Jumbles
+            ctx.fillStyle = '#fbbf24';
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-16, -pr + 4);
+            ctx.lineTo(-10, -pr - 11);
+            ctx.lineTo(0, -pr - 2);
+            ctx.lineTo(10, -pr - 11);
+            ctx.lineTo(16, -pr + 4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Mascot Rounded Body
+            const bodyGrad = ctx.createLinearGradient(0, -pr, 0, pr);
+            bodyGrad.addColorStop(0, '#6366f1');
+            bodyGrad.addColorStop(1, '#4338ca');
+            ctx.fillStyle = bodyGrad;
+            ctx.strokeStyle = '#a5b4fc';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.roundRect(-pr, -pr + 2, pr * 2, pr * 2 - 4, 16);
+            ctx.fill();
+            ctx.stroke();
+
+            // Cute Visor
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.roundRect(-pr + 8, -12, (pr - 8) * 2, 18, 9);
+            ctx.fill();
+
+            // Glowing Eyes (shift slightly toward movement direction)
+            const eyeShift = Math.max(-4, Math.min(4, player.vx * 0.012));
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.arc(-9 + eyeShift, -3, 4.2, 0, Math.PI * 2);
+            ctx.arc(9 + eyeShift, -3, 4.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Eye sparkles
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(-7.5 + eyeShift, -4.5, 1.5, 0, Math.PI * 2);
+            ctx.arc(10.5 + eyeShift, -4.5, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Happy Smile
+            ctx.strokeStyle = '#fbbf24';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.arc(0, 10, 7, 0.15 * Math.PI, 0.85 * Math.PI);
+            ctx.stroke();
+
+            // "ALEX" Badge on Belly
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+            ctx.beginPath();
+            ctx.roundRect(-18, 16, 36, 11, 4);
+            ctx.fill();
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 8.5px "Space Grotesk", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('ALEX', 0, 22);
+
+            ctx.restore();
+
+            // Draw Particle Bursts
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.life);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // Draw Floating Texts
+            floatingTexts.forEach(ft => {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, Math.min(1, ft.life));
+                ctx.font = `800 ${Math.round(16 * ft.scale)}px "Fredoka", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 4;
+                ctx.strokeText(ft.text, ft.x, ft.y);
+                ctx.fillStyle = ft.color;
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.restore();
+            });
+
+            ctx.restore();
+        }
+
+        function gameLoop(now) {
+            const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
+            lastFrameTime = now;
+
+            update(dt);
+            draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- TOUCH, MOUSE & KEYBOARD CONTROLS ---
+        function updatePointerPosition(clientX) {
+            const rect = canvas.getBoundingClientRect();
+            const relX = clientX - rect.left;
+            player.targetX = relX;
+        }
+
+        // Touch Events on Canvas Container
+        container.addEventListener('touchstart', (e) => {
+            if (gameState !== 'PLAYING') return;
+            sfx.init();
+            isPointerDown = true;
+            if (e.touches.length > 0) {
+                updatePointerPosition(e.touches[0].clientX);
+            }
+        }, { passive: true });
+
+        container.addEventListener('touchmove', (e) => {
+            if (gameState !== 'PLAYING' || !isPointerDown) return;
+            if (e.touches.length > 0) {
+                updatePointerPosition(e.touches[0].clientX);
+            }
+        }, { passive: true });
+
+        container.addEventListener('touchend', () => {
+            isPointerDown = false;
+        }, { passive: true });
+
+        // Mouse Events for Desktop Playability
+        container.addEventListener('mousedown', (e) => {
+            if (gameState !== 'PLAYING') return;
+            sfx.init();
+            isPointerDown = true;
+            updatePointerPosition(e.clientX);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (gameState !== 'PLAYING' || !isPointerDown) return;
+            updatePointerPosition(e.clientX);
+        });
+
+        window.addEventListener('mouseup', () => {
+            isPointerDown = false;
+        });
+
+        // Keyboard Arrows / A & D
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = true;
+            if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+                if (gameState === 'PLAYING') togglePause();
+                else if (gameState === 'PAUSED') togglePause();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = false;
+        });
+
+        // --- UI BUTTON BINDINGS ---
+        function togglePause() {
+            if (gameState === 'PLAYING') {
+                gameState = 'PAUSED';
+                pauseOverlay.classList.remove('hidden');
+            } else if (gameState === 'PAUSED') {
+                gameState = 'PLAYING';
+                pauseOverlay.classList.add('hidden');
+                lastFrameTime = performance.now();
+            }
+        }
+
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('play-again-btn').addEventListener('click', startGame);
+        document.getElementById('pause-btn').addEventListener('click', togglePause);
+        document.getElementById('resume-btn').addEventListener('click', togglePause);
+        document.getElementById('restart-from-pause-btn').addEventListener('click', startGame);
+
+        const muteBtn = document.getElementById('mute-btn');
+        muteBtn.addEventListener('click', () => {
+            sfx.init();
+            const isMuted = sfx.toggleMute();
+            muteBtn.textContent = isMuted ? '🔇' : '🔊';
+        });
+
+        // --- BOOTSTRAP ON LOAD ---
+        window.onload = function () {
+            resizeCanvas();
+            pickNextWord();
+            lastFrameTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
